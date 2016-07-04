@@ -36,6 +36,7 @@ Recent Changes
   * sepatate repository created
 
 
-.. |bekhterev.me| image:: https://img.shields.io/badge/paypal-donate-blue.svg
+.. |bekhterev.me| image:: https://img.shields.io/badge/bekhterev.me-some%20kind%20of%20blog-green.svg
    :alt: some kind of blog
-   :target: https://bekhterev.me
+   :target: https://bekhterev.me/index.php
+
