@@ -1,5 +1,3 @@
-|bekhterev.me| 
-
 backupy
 ========
 
@@ -37,6 +35,3 @@ Recent Changes
   * separate repository created
  
 
-.. |bekhterev.me| image:: https://img.shields.io/badge/bekhterev.me-some%20kind%20of%20blog-green.svg
-   :alt: some kind of blog
-   :target: https://bekhterev.me/
