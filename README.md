@@ -8,9 +8,13 @@ backupy
 Features
 ------------
 
-- tree or flat listing of files and folders
-- simultaneous uploads/downloads, retry on error
-- basic plugin support
+- Get RouterOS cfg
+- Copy remote RouterOS files
+- Copy remote pfSense/linux files
+- Deploy SSH key to RouterOS device (TODO yet)
+- Deploy SSH key to Linux device
+- Delete duplicate files
+- Run remote ssh command
 
 
 Quick Start
