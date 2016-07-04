@@ -1,3 +1,5 @@
+[![bekhterev.me](https://img.shields.io/badge/bekhterev.me-some%20kind%20of%20blog-green.svg)](https://bekhterev.me)
+
 backupy
 ========
 
