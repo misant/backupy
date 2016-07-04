@@ -28,15 +28,15 @@ Known Issues
 
 There could be some.
 
+
 Recent Changes
 --------------
 ..
-  0.0.1
-  ~~~~~
-  * sepatate repository created
 
+0.0.1
+~~~~~
+  * separate repository created
 
 .. |bekhterev.me| image:: https://img.shields.io/badge/bekhterev.me-some%20kind%20of%20blog-green.svg
    :alt: some kind of blog
    :target: https://bekhterev.me/index.php
-
