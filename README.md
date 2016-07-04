@@ -36,5 +36,5 @@ There could be some.
 Recent Changes
 --------------
 0.0.1 
-~~~~~
+~~~~
 - separate repository created
