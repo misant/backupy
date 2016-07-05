@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+# import external modules
 from paramiko import SSHClient, AutoAddPolicy
 from shutil import copyfile, move
 from getpass import getpass
@@ -11,261 +12,126 @@ import hashlib
 import sys
 import getopt
 
-#import logging
-#logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
-#logging.debug('This is a log message.')
-
+# variables used
 ssh = SSHClient()
 mode = ''
 
-def get_data(device_ip, work_dir):
-    """Connects to remote RouterOS with device_ip using keys and runs runs "export verbose" to
-    get actual configuration. Determines hostname and saves configuration to actual folder as work_dir/actual/hostname.cfg
-    and to archive folder as workdir/cfg/hostname/timestamp.cfg
-    If new config is same as already archived it is deleted.
-    Also all files stored on RouterOS device are copied to workdir/files/hostname/
-    """
-    host = device_ip
-    user = 'admin'
-    port = 22
-    actual_dir = work_dir + "actual/"
+# import logging
+# logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+# logging.debug('This is a log message.')
 
+
+def open_ssh_session(ip, password="", user="root"):
+    """Open SSH connection using password or key to ip"""
+# Add key if not exist
+    ssh.set_missing_host_key_policy(AutoAddPolicy())
+    print datetime.datetime.now(), "Connecting.. " + ip
+# If password passed try to connect with it
+    if password:
+        ssh.connect(hostname=ip, username=user, password=password, timeout=3)
+# If not try to connect with key
+    else:
+        ssh.connect(hostname=ip, username=user, timeout=3)
+    if ssh.get_transport():
+        ssh.get_transport().window_size = 3 * 1024 * 1024
+        print datetime.datetime.now(), "%s connected" % ip
+    else:
+        print datetime.datetime.now(), "%s SSH connection FAILED" % ip
+    return
+
+
+def close_ssh_session():
+    """Close SSH connection"""
+    ssh.close()
+    print datetime.datetime.now(), "SSH connection closed"
+    return
+
+
+def ssh_cmd_exec(cmd):
+    """Executes command on remote host"""
+    try:
+        stdin, stdout, stderr = ssh.exec_command(cmd, timeout=15)
+        ssh_out = stdout.read() + stderr.read()
+    except:
+        print datetime.datetime.now(), 'Executing "%s" FAILED' % cmd
+        ssh_out = ""
+    return ssh_out
+
+
+def get_ros_config():
+    """Connects to remote RouterOS with device_ip using keys and runs runs "export verbose" to
+     get actual configuration. Determines hostname and saves configuration to actual folder
+     as work_dir/actual/hostname.cfg
+     and to archive folder as workdir/cfg/hostname/timestamp.cfg
+     If new config is same as already archived it is deleted.
+     Also all files stored on RouterOS device are copied to workdir/files/hostname/
+     """
+    try:
+        ros_config = ssh_cmd_exec("export verbose")
+        print datetime.datetime.now(), "RouterOS configuration downloaded"
+    except:
+        print datetime.datetime.now(), "FAILED getting RouterOS configuration"
+        ros_config = ""
+    return ros_config
+
+
+def check_ros_config(ros_config):
+    """Check if ROS config was downloaded till last section"""
+    if "user aaa" in ros_config:
+        print datetime.datetime.now(), "Router OS configurations is OK"
+        check = True
+    else:
+        print datetime.datetime.now(), "Router OS configurations is BROKEN!"
+        check = False
+    return check
+
+
+def get_ros_hostname(ros_config):
+    """Determine hostname from ROS config"""
+    hostname = "unknown"
+    for line in ros_config.splitlines():
+        if 'set name=' in line:
+            hostname = line.split('=')
+            hostname = hostname[1]
+            hostname = hostname.rstrip()
+    print datetime.datetime.now(), "Device name from config = " + hostname
+    return hostname
+
+
+def clean_ros_config(target_dir, ros_config):
+    """Save ROS config to config.tmp without timestamp line"""
+    file_tmp = open(target_dir + 'config.tmp', 'w')
+    file_tmp.write(ros_config)
+    file_tmp.close()
+
+    file_tmp = open(target_dir + 'config.tmp', 'r+')
+    ros_config = file_tmp.readlines()
+    file_tmp.seek(0)
+
+    for line in ros_config:
+        if 'by RouterOS' not in line:
+            file_tmp.write(line)
+
+    file_tmp.truncate()
+    file_tmp.close()
+    return
+
+
+def save_ros_config(target_dir, hostname):
+    """Save ROS config to target dir"""
+    # Save actual config
+    actual_dir = target_dir + "actual/"
     if not os.path.exists(actual_dir):
         os.makedirs(actual_dir)
-
-
-    ssh.set_missing_host_key_policy(AutoAddPolicy())
-    remote_cmd = 'export verbose'
-
-    try:
-        time_stamp = time.strftime("%Y.%m.%d.%H-%M-%S")
-        print datetime.datetime.now(), "Connecting.. " + host
-        try:
-            ssh.connect(hostname=host, username=user, timeout=3)
-            ssh.get_transport().window_size = 3 * 1024 * 1024
-            print datetime.datetime.now(), "Connected"
-
-        except:
-            print datetime.datetime.now(), "SSH connection failed"
-        stdin, stdout, stderr = ssh.exec_command(remote_cmd, timeout=15)
-        data = stdout.read() + stderr.read()
-
-
-        if "user aaa" in data:
-            print datetime.datetime.now(), "Config is OK!"
-            file_tmp = open(work_dir + 'config.tmp', 'w')
-            file_tmp.write(data)
-            file_tmp.close()
-
-            file_tmp = open(work_dir + 'config.tmp', 'r+')
-            data = file_tmp.readlines()
-            file_tmp.seek(0)
-            for i in data:
-                if not 'by RouterOS' in i:
-                    file_tmp.write(i)
-                    if 'set name=' in i:
-                        hostname = i.split('=')
-                        hostname = hostname[1]
-                        hostname = hostname.rstrip()
-                        print datetime.datetime.now(), "Device name from config = " + hostname
-            file_tmp.truncate()
-            file_tmp.close()
-            copyfile (work_dir + 'config.tmp', actual_dir + hostname + '.cfg' )
-
-
-            device_dir = work_dir + 'cfg/' + hostname + '/'
-            if not os.path.exists(device_dir):
-                os.makedirs(device_dir)
-            move (work_dir + 'config.tmp', device_dir + time_stamp + '.cfg' )
-
-            print datetime.datetime.now(), "Deduplicating configuration files"
-            try:
-                check_for_duplicates(device_dir)
-                print datetime.datetime.now(), "Deduplication SUCCEED"
-            except:
-                print datetime.datetime.now(), "Deduplication FAILED"
-
-
-            files_dir = work_dir + 'files/' + hostname + "/"
-            if not os.path.exists(files_dir):
-                os.makedirs(files_dir)
-
-            print datetime.datetime.now(), "Transfering files..."
-
-
-            try:
-                ssh_copy_files (files_dir)
-                print datetime.datetime.now(), "Transfering files SUCCESS"
-            except:
-                print datetime.datetime.now(), "Tanssfering files FAIL"
-
-
-
-        else:
-            print datetime.datetime.now(), "Config broken!"
-
-
-        ssh.close()
-
-    except:
-        print datetime.datetime.now(), "Error connecting to host", host
-    print datetime.datetime.now(), device_ip + " done.\n"
-    return
-
-def remote_cmd(device_ip,cmd):
-    """Connects to remote RouterOS with device_ip using keys and runs runs "export verbose" to
-    get actual configuration. Determines hostname and saves configuration to actual folder as work_dir/actual/hostname.cfg
-    and to archive folder as workdir/cfg/hostname/timestamp.cfg
-    If new config is same as already archived it is deleted.
-    Also all files stored on RouterOS device are copied to workdir/files/hostname/
-    """
-    host = device_ip
-    user = 'root'
-    port = 22
-
-
-    ssh.set_missing_host_key_policy(AutoAddPolicy())
-#    remote_cmd = 'uptime'
-
-    try:
-        time_stamp = time.strftime("%Y.%m.%d.%H-%M-%S")
-        print datetime.datetime.now(), "Connecting.. " + host
-        try:
-            ssh.connect(hostname=host, username=user, timeout=3)
-            ssh.get_transport().window_size = 3 * 1024 * 1024
-            print datetime.datetime.now(), "Connected"
-
-        except:
-            print datetime.datetime.now(), "SSH connection failed"
-        stdin, stdout, stderr = ssh.exec_command(cmd, timeout=15)
-        data = stdout.read() + stderr.read()
-
-        print data
-#       output = data.readlines()
-#       for line in output:
-#           print line
-
-        ssh.close()
-
-    except:
-        print datetime.datetime.now(), "Error connecting to host", host
-    print datetime.datetime.now(), device_ip + " done.\n"
-    return
-
-def ssh_key_transfer(ip, password, pub_key):
-    """Connect to ip with password and put pub_key into authorized_keys"""
-    try:
-        key_file = open(pub_key, 'r')
-        key = key_file.read().rstrip()
-    except:
-        print datetime.datetime.now(), "Cannot open %s" %("pub_key")
-    cmd = 'umask 07; mkdir .ssh; echo "' + key + '" >> .ssh/authorized_keys'
-    user = 'root'
-    ssh.set_missing_host_key_policy(AutoAddPolicy())
+    copyfile(target_dir + 'config.tmp', actual_dir + hostname + '.cfg')
+    # Save historical config
+    device_dir = target_dir + 'cfg/' + hostname + '/'
+    if not os.path.exists(device_dir):
+        os.makedirs(device_dir)
     time_stamp = time.strftime("%Y.%m.%d.%H-%M-%S")
-    print datetime.datetime.now(), "Connecting.. " + ip
-    try:
-        ssh.connect(hostname=ip, username=user, password=password, timeout=3)
-        ssh.get_transport().window_size = 3 * 1024 * 1024
-        print datetime.datetime.now(), "Connected"
-
-        stdin, stdout, stderr = ssh.exec_command(cmd, timeout=15)
-        data = stdout.read() + stderr.read()
-
-        print data
-        ssh.close()
-    except:
-        print datetime.datetime.now(), "SSH connection failed"
-    print datetime.datetime.now(), ip + " done.\n"
-    key_file.close()
+    move(target_dir + 'config.tmp', device_dir + time_stamp + '.cfg')
     return
 
-
-def ssh_copy_files(files_dir, remote_dir="/"):
-    """Recursive copy of all files from remote_dir to files_dir"""
-    sftp = ssh.open_sftp()
-    remote_dirlist = []
-
-
-    for i in sftp.listdir(remote_dir):
-        lstatout=str(sftp.lstat(remote_dir + '/' + i)).split()[0]
-        if 'd' in lstatout:
-            remote_dirlist.append([i])
-
-        else:
-            sftp.get(remote_dir + i, files_dir + i)
-
-
-    for found_dir in remote_dirlist:
-        nfound_dir=''.join(found_dir)
-        nfiles_dir = files_dir + nfound_dir + "/"
-        if not os.path.exists(files_dir + nfound_dir):
-            os.makedirs(files_dir + nfound_dir)
-        ssh_copy_files (nfiles_dir, "/" + nfound_dir + "/")
-
-    sftp.close
-    return
-
-
-def ssh_copy(ip, work_dir, password='some pass', remote_dir='/home/backup/'):
-    """SSH copy from remote_dir to work_dir"""
-
-    user = 'root'
-    port = 22
-
-    ssh.set_missing_host_key_policy(AutoAddPolicy())
-
-
-    time_stamp = time.strftime("%Y.%m.%d.%H-%M-%S")
-    print datetime.datetime.now(), "Connecting.. " + ip
-
-    try:
-        ssh.connect(hostname=ip, username=user, timeout=3, password=password)
-        ssh.get_transport().window_size = 3 * 1024 * 1024
-        print datetime.datetime.now(), "Connected"
-
-        sftp = ssh.open_sftp()
-        remote_dirlist = []
-
-        for i in sftp.listdir(remote_dir):
-            lstatout=str(sftp.lstat(remote_dir + '/' + i)).split()[0]
-            if 'd' in lstatout:
-                remote_dirlist.append([i])
-
-            else:
-                if ".sh" in i:          #transfer only tgz files
-                    print datetime.datetime.now(), "Tranfserring %s:" %(i)
-                    try:
-                        sftp.get(remote_dir + i, work_dir + i, callback=print_totals)
-                        print datetime.datetime.now(), "Transferring complete:", i
-                    except:
-                        print datetime.datetime.now(), "Transferring FAILED", i
-        for found_dir in remote_dirlist:
-            nfound_dir=''.join(found_dir)
-            nfiles_dir = work_dir + nfound_dir + "/"
-            if not os.path.exists(work_dir + nfound_dir):
-                os.makedirs(work_dir + nfound_dir)
-#               ssh_copy(nfiles_dir, "/" + nfound_dir + "/")  #need to adjust for recursion
-
-        sftp.close
-        ssh.close()
-    except:
-        print datetime.datetime.now(), "Can not connect %s via SSH" %(ip)
-
-    return
-
-def print_totals(transferred, to_be_transferred):
-    if to_be_transferred > 1048576:
-        print datetime.datetime.now(), "Transferred: {0}MB\t\tOut of: {1}MB\r".format((transferred / 1048576), (to_be_transferred / 1048576)),
-        sys.stdout.flush()
-    elif to_be_transferred > 1024:
-        print datetime.datetime.now(), "Transferred: {0}KB\t\tOut of: {1}KB\r".format((transferred / 1024), (to_be_transferred / 1024)),
-        sys.stdout.flush()
-    else:
-        print datetime.datetime.now(), "Transferred: {0}B\t\tOut of: {1}B\r".format(transferred, to_be_transferred),
-        sys.stdout.flush()
-
-    return
 
 def chunk_reader(fobj, chunk_size=1024):
     """Generator that reads a file in chunks of bytes"""
@@ -275,7 +141,8 @@ def chunk_reader(fobj, chunk_size=1024):
             return
         yield chunk
 
-def check_for_duplicates(dpath, hash=hashlib.sha1):
+
+def delete_duplicates(dpath, hash=hashlib.sha1):
     """Delete duplicate files in folder
     Copy pasted from http://stackoverflow.com/a/748908/6221971
     And changed to parse only one argument as path
@@ -296,6 +163,96 @@ def check_for_duplicates(dpath, hash=hashlib.sha1):
     return
 
 
+def ssh_get_files(source_dir, target_dir, mask="", showprogress=""):
+    """Recursive copy of all files from remote_dir to files_dir"""
+    sftp = ssh.open_sftp()
+    remote_dirlist = []
+
+    if not os.path.exists(target_dir):
+        os.makedirs(target_dir)
+
+    for i in sftp.listdir(source_dir):
+        lstatout = str(sftp.lstat(source_dir + i)).split()[0]
+        if 'd' in lstatout:
+            remote_dirlist.append([i])
+        else:
+            if mask in i:
+                print datetime.datetime.now(), "Transferring %s" % i
+                if showprogress:
+                    sftp.get(source_dir + i, target_dir + i, callback=print_totals)
+                else:
+                    sftp.get(source_dir + i, target_dir + i)
+                print datetime.datetime.now(), "Transferring %s complete" % i
+
+    for found_dir in remote_dirlist:
+        nfound_dir = ''.join(found_dir)
+        new_target_dir = target_dir + nfound_dir + "/"
+        if not os.path.exists(target_dir + nfound_dir):
+            os.makedirs(target_dir + nfound_dir)
+        ssh_get_files(source_dir + nfound_dir + "/", new_target_dir, mask)
+    sftp.close()
+    return
+
+
+def print_totals(transferred, to_be_transferred):
+    if to_be_transferred > 1048576:
+        print datetime.datetime.now(), "Transferred: {0}MB\t\tOut of: {1}MB\r".format((transferred / 1048576),
+                                                                                      (to_be_transferred / 1048576)),
+        sys.stdout.flush()
+    elif to_be_transferred > 1024:
+        print datetime.datetime.now(), "Transferred: {0}KB\t\tOut of: {1}KB\r".format((transferred / 1024),
+                                                                                      (to_be_transferred / 1024)),
+        sys.stdout.flush()
+    else:
+        print datetime.datetime.now(), "Transferred: {0}B\t\tOut of: {1}B\r".format(transferred, to_be_transferred),
+        sys.stdout.flush()
+    return
+
+
+def ssh_key_transfer(ip, password, pub_key):
+    """Connect to ip with password and put pub_key into authorized_keys"""
+    try:
+        key_file = open(pub_key, 'r')
+        key = key_file.read().rstrip()
+        key_file.close()
+        cmd = 'umask 07; mkdir .ssh; echo "' + key + '" >> .ssh/authorized_keys'
+
+        try:
+            open_ssh_session(ip, password)
+            ssh_cmd_exec(cmd)
+            close_ssh_session()
+            print datetime.datetime.now(), ip + " SSH key deployed.\n"
+        except:
+            print datetime.datetime.now(), ip + " SSH key deployment FAILED.\n"
+
+    except:
+        print datetime.datetime.now(), "Cannot open %s" % pub_key
+
+    return
+
+
+def backup_ros(ip, target_dir):
+    """Backup ROS config, delete duplicates, backup files"""
+    open_ssh_session(ip, user="admin")
+    config = get_ros_config()
+    if check_ros_config(config):
+        hostname = get_ros_hostname(config)
+        device_dir = target_dir + 'cfg/' + hostname + '/'
+        clean_ros_config("/root/ros/", config)
+        save_ros_config("/root/ros/", hostname)
+        delete_duplicates(device_dir)
+        ssh_get_files("/", target_dir + "files/")
+    close_ssh_session()
+    return
+
+
+def backup_nix(ip, password, source_dir, target_dir, mask=""):
+    """Backup files with SFTP"""
+    open_ssh_session(ip, password)
+    ssh_get_files(source_dir, target_dir, mask)
+    close_ssh_session()
+    return
+
 
 class Usage(Exception):
     def __init__(self, msg):
@@ -303,73 +260,11 @@ class Usage(Exception):
                     -t to transfer public key to remote host"
 
 
-def main(argv=None):
-    if argv is None:
-        argv = sys.argv
-        #default values
-        work_dir = "/root/python/"
-        ip_file = open(work_dir + "rb", 'r')
-        mode = 'rb'
-    try:
-        try:
-            opts, args = getopt.getopt(argv[1:], "btmhp:f:l:", ["help"])
-        except getopt.error, msg:
-             raise Usage(msg)
+def main():
+    #     backup_ros("172.16.70.3", "/root/ros/")
+    #    backup_nix("172.16.72.253", "some pass", "/srv/", "/root/nix/",".md")
+    ssh_key_transfer("172.16.72.253", "some pass", "/root/.ssh/id_dsa.pub")
 
-        #parse options
-        for o, a in opts:
-            if o in ("-h", "--help"):
-                print "Usage:\n -t to transfer SSH key to remote host\n -p path to workdir\n -f path to file with ip addresses "
-                sys.exit(0)
-            if o in ("-p"):
-                work_dir = a
-                if not os.path.exists(work_dir):
-                    os.makedirs(work_dir)
-            if o in ("-f"):
-                ip_file = open(a, 'r')
-            if o in ("-m"):
-                print "Mikrotik mode"
-                mode = 'rb'
-            if o in ("-l"):
-                print "Linux mode"
-                mode = 'pf'
-                cmd = a
-            if o in ("-t"):
-                print "Transfer keys"
-                mode = "kt"
-            if o in ("-b"):
-                print "psSense backup mode"
-                mode = 'pb'
-
-        ip_list = ip_file.readlines()
-        for ip in ip_list:
-            ip = ip.rstrip()
-            if mode == 'rb':
-                get_data(ip, work_dir)
-            if mode == 'pf':
-                remote_cmd(ip,cmd)
-            if mode == "kt":
-                password = getpass("Enter password for remote host %s:" %(ip))
-                pub_key  = raw_input("Enter which public key to use:")
-                if not os.path.exists(pub_key):
-                    print "%s does not exist" %(pub_key)
-                else:
-                    ssh_key_transfer(ip,password,pub_key)
-            if mode == 'pb':
-#               password = getpass("Enter password for remote host %s:" %(ip))
-                if not os.path.exists('/root/pf_backup/' + ip + '/'):
-                    os.makedirs('/root/pf_backup/' + ip + '/')
-                ssh_copy(ip, '/root/pf_backup/' + ip + '/')
-            else:
-                print "Mode option unselected", ip
-        ip_file.close()
-
-
-    except Usage, err:
-        print >>sys.stderr, err.msg
-        print >>sys.stderr, "for help use --help"
-        return 2
 
 if __name__ == "__main__":
     sys.exit(main())
-
