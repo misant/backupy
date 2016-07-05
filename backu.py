@@ -236,6 +236,8 @@ def backup_ros(ip, target_dir):
     open_ssh_session(ip, user="admin")
     config = get_ros_config()
     if check_ros_config(config):
+        if not os.path.exists(target_dir):
+            os.makedirs(target_dir)
         hostname = get_ros_hostname(config)
         device_dir = target_dir + 'cfg/' + hostname + '/'
         clean_ros_config("/root/ros/", config)
