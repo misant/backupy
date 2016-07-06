@@ -14,7 +14,6 @@ import argparse
 
 # variables used
 ssh = SSHClient()
-mode = ''
 
 
 # import logging
@@ -286,17 +285,17 @@ def main():
     args = parser.parse_args()
 
     # args validation
+    if args.nix or args.ros or args.key:
+        if not args.ip and not args.addr:
+            parser.error('You need to set --ip or --addr')
+
     if args.ros:
         if not args.dest:
             parser.error('The --ros argument requires --dest')
 
     if args.nix:
-        if not args.source and not args.dest:
-            parser.error('The --nix argument requires: --ip or --addr,  --source and --dest')
-
-    if args.nix or args.ros or args.key:
-        if not args.ip and not args.addr:
-            parser.error('You need to set -ip or -addr')
+        if not args.source or not args.dest:
+            parser.error('The --nix argument requires: --source and --dest')
 
     if args.key:
         if not args.key_path or not args.passw:
