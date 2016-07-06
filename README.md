@@ -38,3 +38,12 @@ Recent Changes
 0.0.1 
 
 - separate repository created
+
+TODO:
+--------------
+- do not create empty folders if wildmask is used
+- script mode and interactive mode switch (show progress or not)
+- enhance show progress for file transferring
+- keys deployment for RouterOS devices
+- multithreading (if possible with Paramiko)
+
