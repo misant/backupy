@@ -45,5 +45,6 @@ TODO:
 - script mode and interactive mode switch (show progress or not)
 - enhance show progress for file transferring
 - keys deployment for RouterOS devices
+- check if key alredy added
 - multithreading (if possible with Paramiko)
 
