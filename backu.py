@@ -10,11 +10,12 @@ import time
 import datetime
 import hashlib
 import sys
-import getopt
+import argparse
 
 # variables used
 ssh = SSHClient()
 mode = ''
+
 
 # import logging
 # logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -52,7 +53,7 @@ def ssh_cmd_exec(cmd):
     try:
         stdin, stdout, stderr = ssh.exec_command(cmd, timeout=15)
         ssh_out = stdout.read() + stderr.read()
-    except:
+    except paramiko.SSHException:
         print datetime.datetime.now(), 'Executing "%s" FAILED' % cmd
         ssh_out = ""
     return ssh_out
@@ -69,7 +70,7 @@ def get_ros_config():
     try:
         ros_config = ssh_cmd_exec("export verbose")
         print datetime.datetime.now(), "RouterOS configuration downloaded"
-    except:
+    except SSHError:
         print datetime.datetime.now(), "FAILED getting RouterOS configuration"
         ros_config = ""
     return ros_config
@@ -163,7 +164,7 @@ def delete_duplicates(dpath, hash=hashlib.sha1):
     return
 
 
-def ssh_get_files(source_dir, target_dir, mask="", showprogress=""):
+def ssh_get_files(source_dir, target_dir, mask="", showprogress="y"):
     """Recursive copy of all files from remote_dir to files_dir"""
     sftp = ssh.open_sftp()
     remote_dirlist = []
@@ -222,10 +223,10 @@ def ssh_key_transfer(ip, password, pub_key):
             ssh_cmd_exec(cmd)
             close_ssh_session()
             print datetime.datetime.now(), ip + " SSH key deployed.\n"
-        except:
+        except SSHError:
             print datetime.datetime.now(), ip + " SSH key deployment FAILED.\n"
 
-    except:
+    except IOError:
         print datetime.datetime.now(), "Cannot open %s" % pub_key
 
     return
@@ -240,10 +241,10 @@ def backup_ros(ip, target_dir):
             os.makedirs(target_dir)
         hostname = get_ros_hostname(config)
         device_dir = target_dir + 'cfg/' + hostname + '/'
-        clean_ros_config("/root/ros/", config)
-        save_ros_config("/root/ros/", hostname)
+        clean_ros_config(target_dir, config)
+        save_ros_config(target_dir, hostname)
         delete_duplicates(device_dir)
-        ssh_get_files("/", target_dir + "files/")
+        ssh_get_files("/", target_dir + "files/" + hostname + '/')
     close_ssh_session()
     return
 
@@ -256,17 +257,84 @@ def backup_nix(ip, password, source_dir, target_dir, mask=""):
     return
 
 
-class Usage(Exception):
-    def __init__(self, msg):
-        self.msg = "Usage:\
-                    -t to transfer public key to remote host"
+class SSHError(Exception):
+    pass
+
+
+def usage():
+    print 'Usage text information'
+    return
 
 
 def main():
-    #     backup_ros("172.16.70.3", "/root/ros/")
-    #    backup_nix("172.16.72.253", "some pass", "/srv/", "/root/nix/",".md")
-    ssh_key_transfer("172.16.72.253", "some pass", "/root/.ssh/id_dsa.pub")
 
+    parser = argparse.ArgumentParser(description='Backup RouterOS of remote files with SSH and SFTP',
+                                     epilog='Have a nice day!')
+    smode = parser.add_mutually_exclusive_group()
+    smode.add_argument('-r', '--ros', action="store_true", help='backup RouterOS')
+    smode.add_argument('-x', '--nix', action="store_true", help='transfer files from linux with SFTP')
+    smode.add_argument('-k', '--key', action="store_true", help='deploy SSH key to linux host')
+    hosts_list = parser.add_mutually_exclusive_group()
+    hosts_list.add_argument('-i', '--ip', help='ip address of remote host')
+    hosts_list.add_argument('-a', '--addr', help='file with ip address list')
+    parser.add_argument('-p', '--passw', help='password for remote host')
+    parser.add_argument('-d', '--dest', help='destination folder for backup')
+    parser.add_argument('-s', '--source', help='source folder for backup')
+    parser.add_argument('-m', '--mask', help='wildmask for files to copy')
+    parser.add_argument('--key_path', help='path to public key')
+
+    args = parser.parse_args()
+
+    # args validation
+    if args.ros:
+        if not args.dest:
+            parser.error('The --ros argument requires --dest')
+
+    if args.nix:
+        if not args.source and not args.dest:
+            parser.error('The --nix argument requires: --ip or --addr,  --source and --dest')
+
+    if args.nix or args.ros or args.key:
+        if not args.ip and not args.addr:
+            parser.error('You need to set -ip or -addr')
+
+    if args.key:
+        if not args.key_path or not args.passw:
+            parser.error('The --key argument requires both --key_path and --passw')
+
+    if not args.mask:
+        args.mask = ""
+
+    # parse options
+    if args.addr:
+        args.addr = open(args.addr, 'r')
+        ip_list = args.addr.readlines()
+        args.addr.close()
+
+    if args.ip:
+        ip_list = []
+        ip_list.append([args.ip])
+
+    if args.ros:
+        for ip in ip_list:
+            ip = ''.join(ip)
+            ip = ip.rstrip()
+            backup_ros(ip, args.dest)
+        sys.exit(0)
+
+    if args.nix:
+        for ip in ip_list:
+            ip = ''.join(ip)
+            ip = ip.rstrip()
+            backup_nix(ip, args.passw, args.source, args.dest, args.mask)
+        sys.exit(0)
+
+    if args.key:
+        for ip in ip_list:
+            ip = ''.join(ip)
+            ip = ip.rstrip()
+            ssh_key_transfer(ip, args.passw, args.key_path)
+        sys.exit(0)
 
 if __name__ == "__main__":
     sys.exit(main())
