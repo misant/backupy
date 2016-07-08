@@ -35,6 +35,14 @@ There could be some.
 
 Recent Changes
 --------------
+0.1.0 
+
+- multithreading added
+- argument parsing added
+- script mode and interactive mode switch (show progress or not), switch with -v or --verbose 
+- check if key alredy added (but only for self, if you want to deploy other hosts` key, check will not work)
+
+
 0.0.1 
 
 - separate repository created
@@ -42,9 +50,7 @@ Recent Changes
 TODO:
 --------------
 - do not create empty folders if wildmask is used
-- script mode and interactive mode switch (show progress or not)
 - enhance show progress for file transferring
 - keys deployment for RouterOS devices
-- check if key alredy added
-- multithreading (if possible with Paramiko)
-
+- logging for script mode and per host
+- pfSense backup function 
