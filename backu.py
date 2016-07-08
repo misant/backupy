@@ -2,15 +2,16 @@
 # -*- coding: utf-8 -*-
 
 # import external modules
+import paramiko
 from paramiko import SSHClient, AutoAddPolicy
 from shutil import copyfile, move
-from getpass import getpass
 import os
 import time
 import datetime
 import hashlib
 import sys
 import argparse
+import socket
 
 # variables used
 ssh = SSHClient()
@@ -23,21 +24,30 @@ ssh = SSHClient()
 
 def open_ssh_session(ip, password="", user="root"):
     """Open SSH connection using password or key to ip"""
-# Add key if not exist
+    flag = 1
+    # Add key if not exist
     ssh.set_missing_host_key_policy(AutoAddPolicy())
-    print datetime.datetime.now(), "Connecting.. " + ip
-# If password passed try to connect with it
-    if password:
-        ssh.connect(hostname=ip, username=user, password=password, timeout=3)
-# If not try to connect with key
-    else:
-        ssh.connect(hostname=ip, username=user, timeout=3)
+    print "\n", datetime.datetime.now(), "Connecting.. " + ip
+    try:
+        ssh.connect(hostname=ip, username=user, password=password, timeout=5)
+        print datetime.datetime.now(), "%s connected" % ip
+    except paramiko.AuthenticationException:
+        print datetime.datetime.now(), "Authentication into %s FAILED" % ip
+        flag = 0
+    except paramiko.SSHException:
+        print datetime.datetime.now(), "%s Negotiation FAILED" % ip
+        flag = 0
+    except socket.error:
+        print datetime.datetime.now(), "Host %s is UNREACHABLE" % ip
+        flag = 0
+    except socket.timeout:
+        print datetime.datetime.now(), "Connecting to host %s TIMEDOUT" % ip
+        flag = 0
     if ssh.get_transport():
         ssh.get_transport().window_size = 3 * 1024 * 1024
-        print datetime.datetime.now(), "%s connected" % ip
     else:
         print datetime.datetime.now(), "%s SSH connection FAILED" % ip
-    return
+    return flag
 
 
 def close_ssh_session():
@@ -55,6 +65,10 @@ def ssh_cmd_exec(cmd):
     except paramiko.SSHException:
         print datetime.datetime.now(), 'Executing "%s" FAILED' % cmd
         ssh_out = ""
+    except socket.timeout:
+        print datetime.datetime.now(), "Executing %s TIMEDOUT" % cmd
+        ssh_out = ""
+
     return ssh_out
 
 
@@ -163,8 +177,8 @@ def delete_duplicates(dpath, hash=hashlib.sha1):
     return
 
 
-def ssh_get_files(source_dir, target_dir, mask="", showprogress="y"):
-    """Recursive copy of all files from remote_dir to files_dir"""
+def ssh_get_files(source_dir, target_dir, mask="", showprogress=""):
+    """Recursive copy of all files from remote_dir to files_dir with wildmask filtering"""
     sftp = ssh.open_sftp()
     remote_dirlist = []
 
@@ -177,40 +191,50 @@ def ssh_get_files(source_dir, target_dir, mask="", showprogress="y"):
             remote_dirlist.append([i])
         else:
             if mask in i:
-                print datetime.datetime.now(), "Transferring %s" % i
                 if showprogress:
+                    #                   print datetime.datetime.now(), "Transferring %s" % i,
                     sftp.get(source_dir + i, target_dir + i, callback=print_totals)
+                    print datetime.datetime.now(), "%s - OK\t" % i
                 else:
                     sftp.get(source_dir + i, target_dir + i)
-                print datetime.datetime.now(), "Transferring %s complete" % i
 
     for found_dir in remote_dirlist:
         nfound_dir = ''.join(found_dir)
         new_target_dir = target_dir + nfound_dir + "/"
         if not os.path.exists(target_dir + nfound_dir):
             os.makedirs(target_dir + nfound_dir)
-        ssh_get_files(source_dir + nfound_dir + "/", new_target_dir, mask)
+        ssh_get_files(source_dir + nfound_dir + "/", new_target_dir, mask, showprogress)
     sftp.close()
     return
 
 
 def print_totals(transferred, to_be_transferred):
     if to_be_transferred > 1048576:
-        print datetime.datetime.now(), "Transferred: {0}MB\t\tOut of: {1}MB\r".format((transferred / 1048576),
-                                                                                      (to_be_transferred / 1048576)),
+        print datetime.datetime.now(), "Sent: \t{0}MB\t\t\tOut of: {1}MB\r".format((transferred / 1048576),
+                                                                                   (to_be_transferred / 1048576)),
         sys.stdout.flush()
     elif to_be_transferred > 1024:
-        print datetime.datetime.now(), "Transferred: {0}KB\t\tOut of: {1}KB\r".format((transferred / 1024),
-                                                                                      (to_be_transferred / 1024)),
+        print datetime.datetime.now(), "Sent: \t{0}KB\t\t\tOut of: {1}KB\r".format((transferred / 1024),
+                                                                                   (to_be_transferred / 1024)),
         sys.stdout.flush()
     else:
-        print datetime.datetime.now(), "Transferred: {0}B\t\tOut of: {1}B\r".format(transferred, to_be_transferred),
+        print datetime.datetime.now(), "Sent: \t{0}B\t\t\tOut of: {1}B\r".format(transferred, to_be_transferred),
         sys.stdout.flush()
     return
 
 
 def ssh_key_transfer(ip, password, pub_key):
     """Connect to ip with password and put pub_key into authorized_keys"""
+    ssh.set_missing_host_key_policy(AutoAddPolicy())
+    try:
+        ssh.connect(hostname=ip, timeout=3)
+        if ssh.get_transport():
+            print datetime.datetime.now(), "%s is already have our key deployed" % ip
+            close_ssh_session()
+        return
+    except:
+        pass
+
     try:
         key_file = open(pub_key, 'r')
         key = key_file.read().rstrip()
@@ -231,10 +255,12 @@ def ssh_key_transfer(ip, password, pub_key):
     return
 
 
-def backup_ros(ip, target_dir):
+def backup_ros(ip, target_dir, showprogress):
     """Backup ROS config, delete duplicates, backup files"""
-    open_ssh_session(ip, user="admin")
-    config = get_ros_config()
+    if open_ssh_session(ip, user="admin"):
+        config = get_ros_config()
+    else:
+        return
     if check_ros_config(config):
         if not os.path.exists(target_dir):
             os.makedirs(target_dir)
@@ -243,17 +269,44 @@ def backup_ros(ip, target_dir):
         clean_ros_config(target_dir, config)
         save_ros_config(target_dir, hostname)
         delete_duplicates(device_dir)
-        ssh_get_files("/", target_dir + "files/" + hostname + '/')
+        try:
+            ssh_get_files("/", target_dir + "files/" + hostname + '/', '', showprogress)
+            print datetime.datetime.now(), "Files transfer from %s SUCCESS" % ip
+        except SSHError:
+            print datetime.datetime.now(), "Files transfer from %s FAILED" % ip
     close_ssh_session()
     return
 
 
-def backup_nix(ip, password, source_dir, target_dir, mask=""):
+def backup_nix(ip, password, source_dir, target_dir, showprogress, mask=""):
     """Backup files with SFTP"""
-    open_ssh_session(ip, password)
-    ssh_get_files(source_dir, target_dir, mask)
-    close_ssh_session()
+    try:
+        if open_ssh_session(ip, password):
+            ssh_get_files(source_dir, target_dir, mask, showprogress)
+            close_ssh_session()
+    except paramiko.AuthenticationException:
+        print datetime.datetime.now(), "Authentication into %s FAILED" % ip
     return
+
+
+def validate_ip(ip):
+    try:
+        socket.inet_pton(socket.AF_INET, ip)
+        # legal
+    except socket.error:
+        # Not legal
+        print datetime.datetime.now(), 'IP address "%s" is not valid, SKIPPED' % ip
+        ip = ''
+    return ip
+
+
+def validate_path(path):
+    if os.path.isabs(path):
+        if not path.endswith('/'):
+            path += '/'
+    else:
+        path = ''
+    return path
 
 
 class SSHError(Exception):
@@ -265,22 +318,26 @@ def usage():
     return
 
 
+# noinspection PyTypeChecker
 def main():
-
     parser = argparse.ArgumentParser(description='Backup RouterOS of remote files with SSH and SFTP',
-                                     epilog='Have a nice day!')
+                                     epilog='Have a nice day!', formatter_class=argparse.RawTextHelpFormatter,
+                                     add_help=False)
+    parser.add_argument('-h', '--help', action="store_true", help='             show this help message and exit')
+    parser.add_argument('-v', '--verbose', action="store_true",
+                        help='          verbose mode, show progress and extended output')
     smode = parser.add_mutually_exclusive_group()
-    smode.add_argument('-r', '--ros', action="store_true", help='backup RouterOS')
-    smode.add_argument('-x', '--nix', action="store_true", help='transfer files from linux with SFTP')
-    smode.add_argument('-k', '--key', action="store_true", help='deploy SSH key to linux host')
+    smode.add_argument('-r', '--ros', action="store_true", help='               backup RouterOS')
+    smode.add_argument('-x', '--nix', action="store_true", help='               transfer files from linux with SFTP')
+    smode.add_argument('-k', '--key', action="store_true", help='               deploy SSH key to linux host')
     hosts_list = parser.add_mutually_exclusive_group()
-    hosts_list.add_argument('-i', '--ip', help='ip address of remote host')
-    hosts_list.add_argument('-a', '--addr', help='file with ip address list')
-    parser.add_argument('-p', '--passw', help='password for remote host')
-    parser.add_argument('-d', '--dest', help='destination folder for backup')
-    parser.add_argument('-s', '--source', help='source folder for backup')
-    parser.add_argument('-m', '--mask', help='wildmask for files to copy')
-    parser.add_argument('--key_path', help='path to public key')
+    hosts_list.add_argument('-i', '--ip', help='                ip address of remote host')
+    hosts_list.add_argument('-a', '--addr', help='              file with ip address list')
+    parser.add_argument('-p', '--passw', help='         password for remote host\r')
+    parser.add_argument('-d', '--dest', help='          absolut path to destination folder for backup')
+    parser.add_argument('-s', '--source', help='                absolute path to source folder for backup')
+    parser.add_argument('-m', '--mask', help='          wildmask for files to copy')
+    parser.add_argument('--key_path', help='            path to public key file')
 
     args = parser.parse_args()
 
@@ -304,36 +361,63 @@ def main():
     if not args.mask:
         args.mask = ""
 
-    # parse options
-    if args.addr:
-        args.addr = open(args.addr, 'r')
-        ip_list = args.addr.readlines()
-        args.addr.close()
+    if args.source:
+        args.source = validate_path(args.source)
+        if not args.source:
+            parser.error('--source is not valid path')
 
+    if args.dest:
+        args.dest = validate_path(args.dest)
+        if not args.dest:
+            parser.error('--dest is not valid path')
+
+    # parse options
+    if args.help:
+        parser.print_help()
+        sys.exit(0)
+
+    if args.verbose:
+        showprogress = 'yes'
+    else:
+        showprogress = ''
+
+    if args.addr:
+        if os.path.exists(args.addr):
+            args.addr = open(args.addr, 'r')
+            ip_list = args.addr.readlines()
+            args.addr.close()
+        else:
+            parser.error('Address list file "%s" does not exist' % args.addr)
     if args.ip:
-        ip_list = []
-        ip_list.append([args.ip])
+        ip_list = [[args.ip]]
 
     if args.ros:
         for ip in ip_list:
             ip = ''.join(ip)
             ip = ip.rstrip()
-            backup_ros(ip, args.dest)
+            ip = validate_ip(ip)
+            if ip:
+                backup_ros(ip, args.dest, showprogress)
         sys.exit(0)
 
     if args.nix:
         for ip in ip_list:
             ip = ''.join(ip)
             ip = ip.rstrip()
-            backup_nix(ip, args.passw, args.source, args.dest, args.mask)
+            validate_ip(ip)
+            if ip:
+                backup_nix(ip, args.passw, args.source, args.dest + ip + '/', showprogress, args.mask)
         sys.exit(0)
 
     if args.key:
         for ip in ip_list:
             ip = ''.join(ip)
             ip = ip.rstrip()
-            ssh_key_transfer(ip, args.passw, args.key_path)
+            validate_ip(ip)
+            if ip:
+                ssh_key_transfer(ip, args.passw, args.key_path)
         sys.exit(0)
+
 
 if __name__ == "__main__":
     sys.exit(main())
