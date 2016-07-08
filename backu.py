@@ -5,6 +5,7 @@
 import paramiko
 from paramiko import SSHClient, AutoAddPolicy
 from shutil import copyfile, move
+from multiprocessing import Pool
 import os
 import time
 import datetime
@@ -66,7 +67,7 @@ def ssh_cmd_exec(cmd):
         print datetime.datetime.now(), 'Executing "%s" FAILED' % cmd
         ssh_out = ""
     except socket.timeout:
-        print datetime.datetime.now(), "Executing %s TIMEDOUT" % cmd
+        print datetime.datetime.now(), 'Executing "%s" TIMEDOUT' % cmd
         ssh_out = ""
 
     return ssh_out
@@ -192,7 +193,7 @@ def ssh_get_files(source_dir, target_dir, mask="", showprogress=""):
         else:
             if mask in i:
                 if showprogress:
-                    #                   print datetime.datetime.now(), "Transferring %s" % i,
+                    print datetime.datetime.now(), "Transferring %s" % i,
                     sftp.get(source_dir + i, target_dir + i, callback=print_totals)
                     print datetime.datetime.now(), "%s - OK\t" % i
                 else:
@@ -278,6 +279,10 @@ def backup_ros(ip, target_dir, showprogress):
     return
 
 
+def ros_helper(args):
+    return backup_ros(*args)
+
+
 def backup_nix(ip, password, source_dir, target_dir, showprogress, mask=""):
     """Backup files with SFTP"""
     try:
@@ -320,6 +325,7 @@ def usage():
 
 # noinspection PyTypeChecker
 def main():
+    ip_list = []
     parser = argparse.ArgumentParser(description='Backup RouterOS of remote files with SSH and SFTP',
                                      epilog='Have a nice day!', formatter_class=argparse.RawTextHelpFormatter,
                                      add_help=False)
@@ -392,13 +398,19 @@ def main():
         ip_list = [[args.ip]]
 
     if args.ros:
-        for ip in ip_list:
-            ip = ''.join(ip)
-            ip = ip.rstrip()
-            ip = validate_ip(ip)
-            if ip:
-                backup_ros(ip, args.dest, showprogress)
-        sys.exit(0)
+        job_args = [(ip, args.dest, showprogress) for ip in ip_list]
+        pool = Pool(len(ip_list))
+        pool.map(ros_helper, job_args, 1)
+        pool.close()
+        pool.join()
+
+        # for ip in ip_list:
+        #    ip = ''.join(ip)
+        #    ip = ip.rstrip()
+        #    ip = validate_ip(ip)
+        #    if ip:
+        #        backup_ros(ip, args.dest, showprogress)
+        # sys.exit(0)
 
     if args.nix:
         for ip in ip_list:
