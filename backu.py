@@ -326,6 +326,7 @@ def usage():
 # noinspection PyTypeChecker
 def main():
     ip_list = []
+    ip = ''
     parser = argparse.ArgumentParser(description='Backup RouterOS of remote files with SSH and SFTP',
                                      epilog='Have a nice day!', formatter_class=argparse.RawTextHelpFormatter,
                                      add_help=False)
@@ -395,22 +396,35 @@ def main():
         else:
             parser.error('Address list file "%s" does not exist' % args.addr)
     if args.ip:
-        ip_list = [[args.ip]]
+        ip = validate_ip(args.ip)
 
     if args.ros:
-        job_args = [(ip, args.dest, showprogress) for ip in ip_list]
-        pool = Pool(len(ip_list))
-        pool.map(ros_helper, job_args, 1)
-        pool.close()
-        pool.join()
+        ip_list_validated = []
+        if args.ip:
+            backup_ros(ip, args.dest, showprogress)
+        else:
+            print ip_list
+            for ip in ip_list:
+                ip = ''.join(ip)
+                ip = ip.rstrip()
+                ip = validate_ip(ip)
+                if ip:
+                    ip_list_validated.append(ip)
 
+            job_args = [(ip, args.dest, showprogress) for ip in ip_list_validated]
+            pool = Pool(len(ip_list))
+            pool.map(ros_helper, job_args, 1)
+            pool.close()
+            pool.join()
+
+        # single thread version
         # for ip in ip_list:
         #    ip = ''.join(ip)
         #    ip = ip.rstrip()
         #    ip = validate_ip(ip)
         #    if ip:
         #        backup_ros(ip, args.dest, showprogress)
-        # sys.exit(0)
+        sys.exit(0)
 
     if args.nix:
         for ip in ip_list:
