@@ -345,6 +345,7 @@ def main():
     parser.add_argument('-s', '--source', help='                absolute path to source folder for backup')
     parser.add_argument('-m', '--mask', help='          wildmask for files to copy')
     parser.add_argument('--key_path', help='            path to public key file')
+    parser.add_argument('--multi', action="store_true", help='            enable if you want multiprocessing')
 
     args = parser.parse_args()
 
@@ -402,8 +403,8 @@ def main():
         ip_list_validated = []
         if args.ip:
             backup_ros(ip, args.dest, showprogress)
-        else:
-            print ip_list
+            sys.exit(0)
+        if args.multi:
             for ip in ip_list:
                 ip = ''.join(ip)
                 ip = ip.rstrip()
@@ -416,15 +417,16 @@ def main():
             pool.map(ros_helper, job_args, 1)
             pool.close()
             pool.join()
-
-        # single thread version
-        # for ip in ip_list:
-        #    ip = ''.join(ip)
-        #    ip = ip.rstrip()
-        #    ip = validate_ip(ip)
-        #    if ip:
-        #        backup_ros(ip, args.dest, showprogress)
-        sys.exit(0)
+            sys.exit(0)
+        # single process version
+        else:
+            for ip in ip_list:
+                ip = ''.join(ip)
+                ip = ip.rstrip()
+                ip = validate_ip(ip)
+                if ip:
+                    backup_ros(ip, args.dest, showprogress)
+            sys.exit(0)
 
     if args.nix:
         for ip in ip_list:
