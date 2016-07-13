@@ -30,7 +30,6 @@ Need to write all that stuff.
 Known Issues
 ------------
 
-- multiprocessing broke -i --ip args processing for other then --ros modes
 - when a lot of files are copied error occurs: "paramiko.ssh_exception.ChannelException: (1, 'Administratively prohibited')"
 - ftp get need to me modified to copy to /target/ not to /target/ip/ folder
 - if -i arg ip validation failed, additional empty string returned
@@ -38,6 +37,13 @@ Known Issues
 
 Recent Changes
 --------------
+0.1.1
+
+- multiprocessing broke -i --ip args processing for other then --ros modes - FIXED
+- --overwrite arg added, by default it will not copy file if its same size as local
+- some small fixes
+
+
 0.1.0 
 
 - multithreading added
