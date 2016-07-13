@@ -178,7 +178,7 @@ def delete_duplicates(dpath, hash=hashlib.sha1):
     return
 
 
-def ssh_get_files(source_dir, target_dir, mask="", showprogress=""):
+def ssh_get_files(source_dir, target_dir, mask="", showprogress="", overwrite="no"):
     """Recursive copy of all files from remote_dir to files_dir with wildmask filtering"""
     sftp = ssh.open_sftp()
     remote_dirlist = []
@@ -192,6 +192,11 @@ def ssh_get_files(source_dir, target_dir, mask="", showprogress=""):
             remote_dirlist.append([i])
         else:
             if mask in i:
+                if overwrite != "yes":
+                    if os.path.isfile(target_dir + i) and sftp.lstat(source_dir + i).st_size == os.lstat(
+                                    target_dir + i).st_size:
+                        print datetime.datetime.now(), '%s is actual' % i
+                        continue
                 if showprogress:
                     print datetime.datetime.now(), "Transferring %s" % i,
                     sftp.get(source_dir + i, target_dir + i, callback=print_totals)
@@ -204,7 +209,7 @@ def ssh_get_files(source_dir, target_dir, mask="", showprogress=""):
         new_target_dir = target_dir + nfound_dir + "/"
         if not os.path.exists(target_dir + nfound_dir):
             os.makedirs(target_dir + nfound_dir)
-        ssh_get_files(source_dir + nfound_dir + "/", new_target_dir, mask, showprogress)
+        ssh_get_files(source_dir + nfound_dir + "/", new_target_dir, mask, showprogress, overwrite)
     sftp.close()
     return
 
@@ -256,7 +261,7 @@ def ssh_key_transfer(ip, password, pub_key):
     return
 
 
-def backup_ros(ip, target_dir, showprogress):
+def backup_ros(ip, target_dir, showprogress, overwrite):
     """Backup ROS config, delete duplicates, backup files"""
     if open_ssh_session(ip, user="admin"):
         config = get_ros_config()
@@ -271,7 +276,7 @@ def backup_ros(ip, target_dir, showprogress):
         save_ros_config(target_dir, hostname)
         delete_duplicates(device_dir)
         try:
-            ssh_get_files("/", target_dir + "files/" + hostname + '/', '', showprogress)
+            ssh_get_files("/", target_dir + "files/" + hostname + '/', '', showprogress, overwrite)
             print datetime.datetime.now(), "Files transfer from %s SUCCESS" % ip
         except SSHError:
             print datetime.datetime.now(), "Files transfer from %s FAILED" % ip
@@ -283,11 +288,11 @@ def ros_helper(args):
     return backup_ros(*args)
 
 
-def backup_nix(ip, password, source_dir, target_dir, showprogress, mask=""):
+def backup_nix(ip, password, source_dir, target_dir, showprogress, overwrite, mask=""):
     """Backup files with SFTP"""
     try:
         if open_ssh_session(ip, password):
-            ssh_get_files(source_dir, target_dir, mask, showprogress)
+            ssh_get_files(source_dir, target_dir, mask, showprogress, overwrite)
             close_ssh_session()
     except paramiko.AuthenticationException:
         print datetime.datetime.now(), "Authentication into %s FAILED" % ip
@@ -346,6 +351,8 @@ def main():
     parser.add_argument('-m', '--mask', help='          wildmask for files to copy')
     parser.add_argument('--key_path', help='            path to public key file')
     parser.add_argument('--multi', action="store_true", help='            enable if you want multiprocessing')
+    parser.add_argument('--overwrite', action="store_true",
+                        help='           if set all files will be overwrited without check ')
 
     args = parser.parse_args()
 
@@ -379,6 +386,11 @@ def main():
         if not args.dest:
             parser.error('--dest is not valid path')
 
+    if args.overwrite:
+        overwrite = "yes"
+    else:
+        overwrite = ''
+
     # parse options
     if args.help:
         parser.print_help()
@@ -402,7 +414,7 @@ def main():
     if args.ros:
         ip_list_validated = []
         if args.ip:
-            backup_ros(ip, args.dest, showprogress)
+            backup_ros(ip, args.dest, showprogress, overwrite)
             sys.exit(0)
         if args.multi:
             for ip in ip_list:
@@ -412,7 +424,7 @@ def main():
                 if ip:
                     ip_list_validated.append(ip)
 
-            job_args = [(ip, args.dest, showprogress) for ip in ip_list_validated]
+            job_args = [(ip, args.dest, showprogress, overwrite) for ip in ip_list_validated]
             pool = Pool(len(ip_list))
             pool.map(ros_helper, job_args, 1)
             pool.close()
@@ -425,7 +437,7 @@ def main():
                 ip = ip.rstrip()
                 ip = validate_ip(ip)
                 if ip:
-                    backup_ros(ip, args.dest, showprogress)
+                    backup_ros(ip, args.dest, showprogress, overwrite)
             sys.exit(0)
 
     if args.nix:
@@ -434,7 +446,7 @@ def main():
             ip = ip.rstrip()
             validate_ip(ip)
             if ip:
-                backup_nix(ip, args.passw, args.source, args.dest + ip + '/', showprogress, args.mask)
+                backup_nix(ip, args.passw, args.source, args.dest + ip + '/', showprogress, overwrite, args.mask)
         sys.exit(0)
 
     if args.key:
