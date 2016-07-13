@@ -331,7 +331,6 @@ def usage():
 # noinspection PyTypeChecker
 def main():
     ip_list = []
-    ip = ''
     parser = argparse.ArgumentParser(description='Backup RouterOS of remote files with SSH and SFTP',
                                      epilog='Have a nice day!', formatter_class=argparse.RawTextHelpFormatter,
                                      add_help=False)
@@ -408,14 +407,14 @@ def main():
             args.addr.close()
         else:
             parser.error('Address list file "%s" does not exist' % args.addr)
+
     if args.ip:
         ip = validate_ip(args.ip)
+        ip_list = [[ip]]
 
     if args.ros:
         ip_list_validated = []
-        if args.ip:
-            backup_ros(ip, args.dest, showprogress, overwrite)
-            sys.exit(0)
+        # multi process version
         if args.multi:
             for ip in ip_list:
                 ip = ''.join(ip)
@@ -432,6 +431,7 @@ def main():
             sys.exit(0)
         # single process version
         else:
+            print ip_list
             for ip in ip_list:
                 ip = ''.join(ip)
                 ip = ip.rstrip()
@@ -444,7 +444,7 @@ def main():
         for ip in ip_list:
             ip = ''.join(ip)
             ip = ip.rstrip()
-            validate_ip(ip)
+            ip = validate_ip(ip)
             if ip:
                 backup_nix(ip, args.passw, args.source, args.dest + ip + '/', showprogress, overwrite, args.mask)
         sys.exit(0)
@@ -453,7 +453,7 @@ def main():
         for ip in ip_list:
             ip = ''.join(ip)
             ip = ip.rstrip()
-            validate_ip(ip)
+            ip = validate_ip(ip)
             if ip:
                 ssh_key_transfer(ip, args.passw, args.key_path)
         sys.exit(0)
