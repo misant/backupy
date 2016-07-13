@@ -263,13 +263,16 @@ def ssh_key_transfer(ip, password, pub_key):
 
 def backup_ros(ip, target_dir, showprogress, overwrite):
     """Backup ROS config, delete duplicates, backup files"""
+    if not os.path.exists(target_dir):
+        os.makedirs(target_dir)
+    log_file = open(target_dir + ip + '.log', 'a')
+    sys.stdout = log_file
+
     if open_ssh_session(ip, user="admin"):
         config = get_ros_config()
     else:
         return
     if check_ros_config(config):
-        if not os.path.exists(target_dir):
-            os.makedirs(target_dir)
         hostname = get_ros_hostname(config)
         device_dir = target_dir + 'cfg/' + hostname + '/'
         clean_ros_config(target_dir, config)
@@ -281,6 +284,8 @@ def backup_ros(ip, target_dir, showprogress, overwrite):
         except SSHError:
             print datetime.datetime.now(), "Files transfer from %s FAILED" % ip
     close_ssh_session()
+    sys.stdout = sys.__stdout__
+    log_file.close()
     return
 
 
@@ -431,7 +436,6 @@ def main():
             sys.exit(0)
         # single process version
         else:
-            print ip_list
             for ip in ip_list:
                 ip = ''.join(ip)
                 ip = ip.rstrip()
@@ -458,6 +462,7 @@ def main():
                 ssh_key_transfer(ip, args.passw, args.key_path)
         sys.exit(0)
 
-
+    parser.print_usage()
+    print '--help for help'
 if __name__ == "__main__":
     sys.exit(main())
