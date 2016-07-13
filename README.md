@@ -33,6 +33,7 @@ Known Issues
 - when a lot of files are copied error occurs: "paramiko.ssh_exception.ChannelException: (1, 'Administratively prohibited')"
 - ftp get need to me modified to copy to /target/ not to /target/ip/ folder
 - if -i arg ip validation failed, additional empty string returned
+- with --multi arg output is totally mixed 
 
 
 Recent Changes
