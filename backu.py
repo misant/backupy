@@ -304,6 +304,21 @@ def backup_nix(ip, password, source_dir, target_dir, showprogress, overwrite, ma
     return
 
 
+def backup_pf(ip, password, source_dir, target_dir, showprogress, overwrite, mask=""):
+    """Backup files with SFTP"""
+    try:
+        if open_ssh_session(ip, password):
+            try:
+                ssh_get_files(source_dir, target_dir, mask, showprogress, overwrite)
+                ssh_cmd_exec("mkdir /home/backup/ok")
+            except:
+                print datetime.datetime.now(), "File transfer from %s FAILED" % ip
+            close_ssh_session()
+    except paramiko.AuthenticationException:
+        print datetime.datetime.now(), "Authentication into %s FAILED" % ip
+    return
+
+
 def validate_ip(ip):
     try:
         socket.inet_pton(socket.AF_INET, ip)
@@ -345,6 +360,7 @@ def main():
     smode = parser.add_mutually_exclusive_group()
     smode.add_argument('-r', '--ros', action="store_true", help='               backup RouterOS')
     smode.add_argument('-x', '--nix', action="store_true", help='               transfer files from linux with SFTP')
+    smode.add_argument('--pf_sense', action="store_true", help='               backup pfSense host')
     smode.add_argument('-k', '--key', action="store_true", help='               deploy SSH key to linux host')
     hosts_list = parser.add_mutually_exclusive_group()
     hosts_list.add_argument('-i', '--ip', help='                ip address of remote host')
@@ -451,6 +467,15 @@ def main():
             ip = validate_ip(ip)
             if ip:
                 backup_nix(ip, args.passw, args.source, args.dest + ip + '/', showprogress, overwrite, args.mask)
+        sys.exit(0)
+
+    if args.pf_sense:
+        for ip in ip_list:
+            ip = ''.join(ip)
+            ip = ip.rstrip()
+            ip = validate_ip(ip)
+            if ip:
+                backup_pf(ip, args.passw, args.source, args.dest + ip + '/', showprogress, overwrite, args.mask)
         sys.exit(0)
 
     if args.key:
