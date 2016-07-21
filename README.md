@@ -63,4 +63,5 @@ TODO:
 - enhance show progress for file transferring
 - keys deployment for RouterOS devices
 - logging for script mode and per host
-- pfSense backup function 
+- pfSense backup function (added with simple options)
+- MySQL backup function
