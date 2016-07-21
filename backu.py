@@ -357,11 +357,6 @@ def main():
     parser.add_argument('-h', '--help', action="store_true", help='             show this help message and exit')
     parser.add_argument('-v', '--verbose', action="store_true",
                         help='          verbose mode, show progress and extended output')
-    smode = parser.add_mutually_exclusive_group()
-    smode.add_argument('-r', '--ros', action="store_true", help='               backup RouterOS')
-    smode.add_argument('-x', '--nix', action="store_true", help='               transfer files from linux with SFTP')
-    smode.add_argument('--pf_sense', action="store_true", help='               backup pfSense host')
-    smode.add_argument('-k', '--key', action="store_true", help='               deploy SSH key to linux host')
     hosts_list = parser.add_mutually_exclusive_group()
     hosts_list.add_argument('-i', '--ip', help='                ip address of remote host')
     hosts_list.add_argument('-a', '--addr', help='              file with ip address list')
@@ -373,23 +368,37 @@ def main():
     parser.add_argument('--multi', action="store_true", help='            enable if you want multiprocessing')
     parser.add_argument('--overwrite', action="store_true",
                         help='           if set all files will be overwrited without check ')
-
+    parser.add_argument('--mode', help='          mode selection', choices=['mikrotik', 'sftp', 'pfsense', 'key'])
     args = parser.parse_args()
 
+    ros = False
+    nix = False
+    pf_sense = False
+    key = False
+
+    if args.mode == 'mikrotik':
+        ros = True
+    if args.mode == 'sftp':
+        nix = True
+    if args.mode == 'pfsense':
+        pf_sense = True
+    if args.mode == 'key':
+        key = True
+
     # args validation
-    if args.nix or args.ros or args.key:
+    if nix or ros or key:
         if not args.ip and not args.addr:
             parser.error('You need to set --ip or --addr')
 
-    if args.ros:
+    if ros:
         if not args.dest:
             parser.error('The --ros argument requires --dest')
 
-    if args.nix:
+    if nix:
         if not args.source or not args.dest:
             parser.error('The --nix argument requires: --source and --dest')
 
-    if args.key:
+    if key:
         if not args.key_path or not args.passw:
             parser.error('The --key argument requires both --key_path and --passw')
 
@@ -433,7 +442,7 @@ def main():
         ip = validate_ip(args.ip)
         ip_list = [[ip]]
 
-    if args.ros:
+    if ros:
         ip_list_validated = []
         # multi process version
         if args.multi:
@@ -460,16 +469,19 @@ def main():
                     backup_ros(ip, args.dest, showprogress, overwrite)
             sys.exit(0)
 
-    if args.nix:
+    if nix:
         for ip in ip_list:
             ip = ''.join(ip)
             ip = ip.rstrip()
             ip = validate_ip(ip)
             if ip:
-                backup_nix(ip, args.passw, args.source, args.dest + ip + '/', showprogress, overwrite, args.mask)
+                if args.ip:
+                    backup_nix(ip, args.passw, args.source, args.dest, showprogress, overwrite, args.mask)
+                else:
+                    backup_nix(ip, args.passw, args.source, args.dest + ip + '/', showprogress, overwrite, args.mask)
         sys.exit(0)
 
-    if args.pf_sense:
+    if pf_sense:
         for ip in ip_list:
             ip = ''.join(ip)
             ip = ip.rstrip()
@@ -478,7 +490,7 @@ def main():
                 backup_pf(ip, args.passw, args.source, args.dest + ip + '/', showprogress, overwrite, args.mask)
         sys.exit(0)
 
-    if args.key:
+    if key:
         for ip in ip_list:
             ip = ''.join(ip)
             ip = ip.rstrip()
