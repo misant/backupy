@@ -195,7 +195,8 @@ def ssh_get_files(source_dir, target_dir, mask="", showprogress="", overwrite="n
                 if overwrite != "yes":
                     if os.path.isfile(target_dir + i) and sftp.lstat(source_dir + i).st_size == os.lstat(
                                     target_dir + i).st_size:
-                        print datetime.datetime.now(), '%s is actual' % i
+                        if showprogress:
+                            print datetime.datetime.now(), '%s is actual' % i
                         continue
                 if showprogress:
                     print datetime.datetime.now(), "Transferring %s" % i,
