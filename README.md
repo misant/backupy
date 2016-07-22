@@ -65,4 +65,4 @@ TODO:
 - logging for script mode and per host
 - pfSense backup function (added with simple options)
 - MySQL backup function
-- remote CMD from keys 
+- remote CMD from args
