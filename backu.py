@@ -59,7 +59,7 @@ def close_ssh_session():
 
 
 def ssh_cmd_exec(cmd):
-    """Executes command on remote host"""
+    """Executes command on remote host and returns output as ssh_out"""
     try:
         stdin, stdout, stderr = ssh.exec_command(cmd, timeout=15)
         ssh_out = stdout.read() + stderr.read()
@@ -179,7 +179,7 @@ def delete_duplicates(dpath, hash=hashlib.sha1):
 
 
 def ssh_get_files(source_dir, target_dir, mask="", showprogress="", overwrite="no"):
-    """Recursive copy of all files from remote_dir to files_dir with wildmask filtering"""
+    """Recursive copy of all files from source_dir to target_dir with wildmask filtering"""
     sftp = ssh.open_sftp()
     remote_dirlist = []
 
@@ -355,21 +355,22 @@ def main():
     parser = argparse.ArgumentParser(description='Backup RouterOS of remote files with SSH and SFTP',
                                      epilog='Have a nice day!', formatter_class=argparse.RawTextHelpFormatter,
                                      add_help=False)
-    parser.add_argument('-h', '--help', action="store_true", help='             show this help message and exit')
-    parser.add_argument('-v', '--verbose', action="store_true",
-                        help='          verbose mode, show progress and extended output')
+    parser.add_argument('--mode', help='		mode selection', choices=['mikrotik', 'sftp', 'pfsense', 'key'])
     hosts_list = parser.add_mutually_exclusive_group()
-    hosts_list.add_argument('-i', '--ip', help='                ip address of remote host')
-    hosts_list.add_argument('-a', '--addr', help='              file with ip address list')
-    parser.add_argument('-p', '--passw', help='         password for remote host\r')
-    parser.add_argument('-d', '--dest', help='          absolut path to destination folder for backup')
-    parser.add_argument('-s', '--source', help='                absolute path to source folder for backup')
-    parser.add_argument('-m', '--mask', help='          wildmask for files to copy')
-    parser.add_argument('--key_path', help='            path to public key file')
-    parser.add_argument('--multi', action="store_true", help='            enable if you want multiprocessing')
+    hosts_list.add_argument('-i', '--ip', help='		ip address of remote host')
+    hosts_list.add_argument('-a', '--addr', help='		file with ip address list')
+    parser.add_argument('-p', '--passw', help='		password for remote host')
+    parser.add_argument('-d', '--dest', help='		absolut path to destination folder for backup')
+    parser.add_argument('-s', '--source', help='		absolute path to source folder for backup')
+    parser.add_argument('-m', '--mask', help='		wildmask for files to copy')
+    parser.add_argument('--key_path', help='		path to public key file')
+    parser.add_argument('--multi', action="store_true", help='		enable if you want multiprocessing')
     parser.add_argument('--overwrite', action="store_true",
-                        help='           if set all files will be overwrited without check ')
-    parser.add_argument('--mode', help='          mode selection', choices=['mikrotik', 'sftp', 'pfsense', 'key'])
+                        help='		if set all files will be overwrited without check\n')
+    parser.add_argument('-v', '--verbose', action="store_true",
+                        help='		verbose mode, show progress and extended output')
+    parser.add_argument('-h', '--help', action="store_true", help='		show this help message and exit')
+
     args = parser.parse_args()
 
     ros = False
@@ -504,3 +505,4 @@ def main():
     print '--help for help'
 if __name__ == "__main__":
     sys.exit(main())
+
