@@ -124,8 +124,14 @@ def clean_ros_config(target_dir, ros_config):
     file_tmp.seek(0)
 
     for line in ros_config:
+        if ' by RouterOS ' in line:
+            ros_ver = line.split(' by RouterOS ')
+            ros_ver = ros_ver[1]
+            ros_ver = ros_ver.rstrip()
+	    ros_ver = '# ' + ros_ver + '\n'
+    	    file_tmp.write(ros_ver)
         if 'by RouterOS' not in line:
-            file_tmp.write(line)
+    	    file_tmp.write(line)
 
     file_tmp.truncate()
     file_tmp.close()
