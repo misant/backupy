@@ -143,11 +143,11 @@ def compare_ros_config(target_dir, hostname):
     change = True
     if not os.path.exists(actual_dir):
 	print datetime.datetime.now(), 'No actual folder'
-        ssh_cmd_exec("/system backup save name=" + backup_name)
+        ssh_cmd_exec("/system backup save name=" + backup_name + " dont-encrypt=yes")
 	return backup_name, change
     if not os.path.exists(actual_dir + hostname + '.cfg'):
 	print datetime.datetime.now(), 'No actual configs'
-        ssh_cmd_exec("/system backup save name=" + backup_name)
+        ssh_cmd_exec("/system backup save name=" + backup_name + backup_name + " dont-encrypt=yes"))
 	return backup_name, change
     conf_new = open(target_dir + 'config.tmp')
     conf_old = open(actual_dir + hostname + '.cfg')
@@ -160,7 +160,7 @@ def compare_ros_config(target_dir, hostname):
 
 	if conf_new_line != conf_old_line:
 	    print datetime.datetime.now(), 'Configuration changed saving backup'
-    	    ssh_cmd_exec("/system backup save name=" + backup_name)
+    	    ssh_cmd_exec("/system backup save name=" + backup_name + backup_name + " dont-encrypt=yes"))
 	    return backup_name, change
         conf_new_line = conf_new.readline()
         conf_old_line = conf_old.readline()
