@@ -331,7 +331,7 @@ def backup_ros(ip, target_dir, showprogress, overwrite):
     if not os.path.exists(target_dir):
         os.makedirs(target_dir)
     log_file = open(target_dir + ip + '.log', 'a')
-#    sys.stdout = log_file
+    sys.stdout = log_file
 
     if open_ssh_session(ip, user="admin"):
         config = get_ros_config()
