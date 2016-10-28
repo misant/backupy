@@ -128,16 +128,48 @@ def clean_ros_config(target_dir, ros_config):
             ros_ver = line.split(' by RouterOS ')
             ros_ver = ros_ver[1]
             ros_ver = ros_ver.rstrip()
-	    ros_ver = '# ' + ros_ver + '\n'
-    	    file_tmp.write(ros_ver)
+            ros_ver = '# ' + ros_ver + '\n'
+	    file_tmp.write(ros_ver)
         if 'by RouterOS' not in line:
-    	    file_tmp.write(line)
+	    file_tmp.write(line)
 
     file_tmp.truncate()
     file_tmp.close()
     return
 
+def compare_ros_config(target_dir, hostname):
+    actual_dir = target_dir + "actual/"
+    backup_name = "auto" + time.strftime("%Y.%m.%d.%H-%M-%S")
+    change = True
+    if not os.path.exists(actual_dir):
+	print datetime.datetime.now(), 'No actual folder'
+        ssh_cmd_exec("/system backup save name=" + backup_name)
+	return backup_name, change
+    if not os.path.exists(actual_dir + hostname + '.cfg'):
+	print datetime.datetime.now(), 'No actual configs'
+        ssh_cmd_exec("/system backup save name=" + backup_name)
+	return backup_name, change
+    conf_new = open(target_dir + 'config.tmp')
+    conf_old = open(actual_dir + hostname + '.cfg')
+    conf_new_line = conf_new.readline()
+    conf_old_line = conf_old.readline()
+#    line_no=1
+    while conf_new_line !='' or conf_old_line !='':
+	conf_new_line = conf_new_line.rstrip()
+	conf_old_line = conf_old_line.rstrip()
 
+	if conf_new_line != conf_old_line:
+	    print datetime.datetime.now(), 'Configuration changed saving backup'
+    	    ssh_cmd_exec("/system backup save name=" + backup_name)
+	    return backup_name, change
+        conf_new_line = conf_new.readline()
+        conf_old_line = conf_old.readline()
+    conf_new.close()
+    conf_old.close()
+    change = False
+    print datetime.datetime.now(), 'Configuration not changed'
+    return backup_name, change
+    
 def save_ros_config(target_dir, hostname):
     """Save ROS config to target dir"""
     # Save actual config
@@ -274,6 +306,7 @@ def backup_ros(ip, target_dir, showprogress, overwrite):
         os.makedirs(target_dir)
     log_file = open(target_dir + ip + '.log', 'a')
     sys.stdout = log_file
+#    backup_name = "auto" + time.strftime("%Y.%m.%d.%H-%M-%S")
 
     if open_ssh_session(ip, user="admin"):
         config = get_ros_config()
@@ -283,11 +316,15 @@ def backup_ros(ip, target_dir, showprogress, overwrite):
         hostname = get_ros_hostname(config)
         device_dir = target_dir + 'cfg/' + hostname + '/'
         clean_ros_config(target_dir, config)
+	backup_name, change = compare_ros_config(target_dir, hostname)
         save_ros_config(target_dir, hostname)
         delete_duplicates(device_dir)
         try:
             ssh_get_files("/", target_dir + "files/" + hostname + '/', '', showprogress, overwrite)
             print datetime.datetime.now(), "Files transfer from %s SUCCESS" % ip
+	    if change == True:
+    		delout=ssh_cmd_exec("delay delay-time=5")
+		removal=ssh_cmd_exec("file remove " + backup_name)
         except SSHError:
             print datetime.datetime.now(), "Files transfer from %s FAILED" % ip
     close_ssh_session()
