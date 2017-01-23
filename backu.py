@@ -115,11 +115,11 @@ def get_ros_hostname(ros_config):
 
 def clean_ros_config(target_dir, ros_config):
     """Save ROS config to config.tmp without timestamp line"""
-    file_tmp = open(target_dir + 'config.tmp', 'w')
+    file_tmp = open(target_dir + hostname, 'w')
     file_tmp.write(ros_config)
     file_tmp.close()
 
-    file_tmp = open(target_dir + 'config.tmp', 'r+')
+    file_tmp = open(target_dir + hostname, 'r+')
     ros_config = file_tmp.readlines()
     file_tmp.seek(0)
 
@@ -340,7 +340,7 @@ def backup_ros(ip, target_dir, showprogress, overwrite):
     if check_ros_config(config):
         hostname = get_ros_hostname(config)
         device_dir = target_dir + 'cfg/' + hostname + '/'
-        clean_ros_config(target_dir, config)
+        clean_ros_config(target_dir, config, hostname)
 	change = check_ros_changes(target_dir, hostname)
 	if change == True:
     	    save_ros_config(target_dir, hostname)
