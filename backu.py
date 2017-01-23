@@ -113,7 +113,7 @@ def get_ros_hostname(ros_config):
     return hostname
 
 
-def clean_ros_config(target_dir, ros_config):
+def clean_ros_config(target_dir, ros_config, hostname):
     """Save ROS config to config.tmp without timestamp line"""
     file_tmp = open(target_dir + hostname, 'w')
     file_tmp.write(ros_config)
@@ -160,7 +160,7 @@ def check_ros_changes(target_dir, hostname):
     if not os.path.exists(actual_dir + hostname + '.cfg'):
 	print datetime.datetime.now(), 'No actual config'
 	return change
-    conf_new = open(target_dir + 'config.tmp')
+    conf_new = open(target_dir + hostname)
     conf_old = open(actual_dir + hostname + '.cfg')
     conf_new_line = conf_new.readline()
     conf_old_line = conf_old.readline()
@@ -187,13 +187,13 @@ def save_ros_config(target_dir, hostname):
     actual_dir = target_dir + "actual/"
     if not os.path.exists(actual_dir):
         os.makedirs(actual_dir)
-    copyfile(target_dir + 'config.tmp', actual_dir + hostname + '.cfg')
+    copyfile(target_dir + hostname, actual_dir + hostname + '.cfg')
     # Save historical config
     device_dir = target_dir + 'cfg/' + hostname + '/'
     if not os.path.exists(device_dir):
         os.makedirs(device_dir)
     time_stamp = time.strftime("%Y.%m.%d.%H-%M-%S")
-    move(target_dir + 'config.tmp', device_dir + time_stamp + '.cfg')
+    move(target_dir + hostname, device_dir + time_stamp + '.cfg')
     return
 
 
@@ -359,7 +359,8 @@ def backup_ros(ip, target_dir, showprogress, overwrite):
             except SSHError:
                 print datetime.datetime.now(), "Files transfer from %s FAILED" % ip
 	else:
-	    os.remove(target_dir + 'config.tmp')
+	    os.remove(target_dir + hostname)
+	    
     close_ssh_session()
     sys.stdout = sys.__stdout__
     log_file.close()
